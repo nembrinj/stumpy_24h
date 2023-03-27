@@ -833,7 +833,11 @@ def _get_first_mstump_profile(
     for i in range(d):
         if not i % m == 0:
             continue
-        min_index = np.argmin(D[i,0::m]) * m #### CHANGE HERE restrict to multiples of window
+        # make sure to look for multiple of m starting from 0 for the minimums
+        first = m-start
+        if first == m : 
+            first = 0
+        min_index = np.argmin(D[i,first::m]) * m #### CHANGE HERE restrict to multiples of window
         I[i] = min_index
         P[i] = D[i, min_index]
         if np.isinf(P[i]):  # pragma nocover
@@ -1061,8 +1065,9 @@ def _compute_PI(d, idx, D, D_prime, range_start, P, I, m, p=2.0):
     for i in range(d):
         D_prime = D_prime + np.power(D[i], 1.0 / p)
 
-        min_index = np.argmin(D_prime[::m]) * m ### CHANGE HERE
         pos = idx - range_start
+        # startindex = m - pos%mto make sure the minimum is always on a multiple of m
+        min_index = np.argmin(D_prime[(m-(pos % m))::m]) * m ### CHANGE HERE
         I[i, pos] = min_index
         P[i, pos] = D_prime[min_index] / (i + 1)
         if np.isinf(P[i, pos]):  # pragma nocover
@@ -1227,13 +1232,21 @@ def _mstump(
 
         _compute_PI(d, idx, D, D_prime, range_start, P, I, m) 
 
+    # select only multiples of m
+    P = P[:,m-range_start::m]
+    I = I[:,m-range_start::m]
 
-    P = P[:,0::m]
-    I = I[:,0::m]
-
+    # multiply the values to
     P = np.repeat(P,m, axis=1)
     I = np.repeat(I,m, axis=1)
 
+    # still missing m-range_start first values (set to 1, are corrected afterwards)
+    prepend = np.ones((P.shape[0],m-range_start))
+    P = np.column_stack((prepend,P))
+    prepend = np.ones((I.shape[0],m-range_start))
+    I = np.column_stack((prepend,I))
+
+    # finally make sure we return the right size
     P = P[:,0:range_stop - range_start]
     I = I[:,0:range_stop - range_start]
 
@@ -1385,5 +1398,10 @@ def mstump_m(T, m, include=None, discords=False, normalize=True, p=2.0):
         include,
         discords
     )
+
+    ## copy first matrix profile to the first m-1 elements
+
+    P[:,1:m] = np.tile(P[:,0].transpose(),(m-1,1)).transpose()
+    I[:,1:m] = np.tile(I[:,0].transpose(),(m-1,1)).transpose()
 
     return P, I
